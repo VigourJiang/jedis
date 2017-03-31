@@ -1,0 +1,120 @@
+第一部分，TCP连接与RESP协议
+329	jedis/Connection.java	
+1303	jedis/BinaryClient.java	
+1220	jedis/Client.java	
+	派生关系如下：Object <- Connection <- BinaryClient <- Client
+	Connection: 直接包含了Socket、RedisInputStream、RedisOutputStream对象，
+				打开和关闭TCP连接，设置TCP Socket连接的各种属性
+				借助Protocol类，发送命令，接收应答
+	BinaryClient：发送Redis的各种命令，命令参数是按照byte[]传进来的（这也应该是名字中“Binary”的由来）
+	Client：发送Redis的各种命令，命令参数是Java Object的形式。
+
+275	jedis/Protocol.java	
+	处理Redis的RESP序列化协议，提供以下两个处理函数：
+  		1. public static void sendCommand(
+  			final RedisOutputStream os, 
+  			final ProtocolCommand command, 
+  			final byte[]... args); 
+  		2. public static Object read(final RedisInputStream is);
+206	util/RedisInputStream.java
+	用于与Redis进行Socket通信的InputStream
+	绑定了Redis通信协议的部分特性。
+219	util/RedisOutputStream.java
+	用于与Redis进行Socket通信的OutputStream
+	带有buffer的OutputStream，buffer的大小默认为8192（1024*8）
+	这个buffer是Jedis的pipeline功能的关键
+
+第二部分，基本功能
+3741	jedis/BinaryJedis.java	
+3578	jedis/Jedis.java	
+	派生关系如下：Object <- BinaryJedis <- Jedis
+	BinaryJedis：包含一个Client、Transaction、Pipeline对象。
+				向Redis发送命令，并从Redis获取应答。
+				命令和应答都是byte[]的形式。
+				从Redis获取应答之前，会把OutputStream中的命令flush出去。
+				另外有个两个重要函数：
+					1. multi()返回一个Transaction对象。在exec执行前所有命令都应该通过Transaction执行。
+					2. pipelined()返回一个Pipeline对象。
+	Jedis：不包含任何字段。向Redis发送命令，并从Redis获取应答。命令和应答都是Java Object的形式
+
+77	jedis/Response.java	
+4	jedis/Builder.java	
+488	jedis/BuilderFactory.java	
+	Response：一开始是一个占位符，表示期待从Redis服务器获取一个应答。
+			Response中包含了一个Builder对象，
+			这个Builder对象，负责把从Redis中获取到的原始应答对象转换为高级的Java Object。
+	Builder：空接口
+	BuilderFactory：Builder的各种实现。每种实现负责一种具体的格式转换。			
+
+第三部分，Pipeline和Transaction
+34	jedis/Queable.java	
+1650	jedis/PipelineBase.java	
+568	jedis/MultiKeyPipelineBase.java	
+160	jedis/Pipeline.java	
+94	jedis/Transaction.java	
+	类继承关系：Object <- Queable <- PipelineBase <- MultiKeyPipelineBase <- Pipeline
+																		<- Transaction
+												<- ShardedJedisPipeline
+	Transaction：在BinaryJedis中用multi()函数创建该对象，
+		后续命令一直通过该对象调用，直到调用exec()或者discard()命令。
+		执行完exec或者discarad后，命令又可以通过BinaryJedis发送了。
+	Pipeline：在BinaryJedis中通过pipelined()函数创建该对象。
+		后续命令要一直通过该对象调用，直到调用sync()把pipeline中所有的应答清空。
+		执行完sync后，命令又可通过BInaryJedis发送了。
+	ShardedJedisPipeline：见sharded相关分析。
+		
+第四部分，连接池		
+191	util/Pool.java
+27	jedis/JedisPoolAbstract.java
+251	jedis/JedisPool.java
+117	jedis/ShardedJedisPool.java
+334	jedis/JedisSentinelPool.java	
+145	jedis/JedisFactory.java	
+	类继承关系：Object <- Pool <- JedisPoolAbstract <- JedisPool
+												  <- JedisSentinelPool
+							 <- ShardedJedisPool	
+	Pool：把pool的功能转发给apache.commons.pool2库来实现。
+	JedisPool：连接单机RedisServer的连接池。
+	JedisFactory：JedisPool包含了该对象，用与创建Jedis对象。
+	ShardedJedisPool：修改Object的Factory为ShardedJedisFactory，创建ShardedJedis对象。
+
+第五部分，数据分片
+20	util/ShardInfo.java
+298	jedis/JedisShardInfo.java
+	继承关系：ShardInfo <- JedisShardInfo
+	JedisShardInfo为服务器的分片配置信息：每台服务器的地址、密码、权重等。	
+
+108	util/Sharded.java
+882	jedis/BinaryShardedJedis.java
+905	jedis/ShardedJedis.java
+	继承关系：Sharded <- BinaryShardedJedis <- ShardedJedis
+	实现分片的关键是Shared类，详细请参见代码中的注释，核心思路：
+		1. 为每台服务器生成160*weight个点，weight为服务器的权重。权重为2，则生成320个点。
+		2. 所有服务器生成的点，存储到一个TreeMap中。TreeMap是按照Key排序的红黑树。
+	ShardedJedis：拦截每个Redis命令，根据命令的Key获取一个Jedis对象，然后把命令发送给这个Jedis对象。
+76	jedis/ShardedJedisPipeline.java
+	分片条件下，实现pipeline。实际上是每个服务器进行pipeline。
+117	jedis/ShardedJedisPool.java
+	分片条件下，实现连接池。该连接池返回的对象是ShardedJedis。
+	实际上是每个服务器维护一个连接池。
+38	util/Hashing.java
+146	util/MurmurHash.java
+	一种哈希算法，在分片中用到（把服务器信息转换为整数）。
+
+第六部分，集群
+1875	jedis/BinaryJedisCluster.java
+1856	jedis/JedisCluster.java
+176	jedis/JedisClusterCommand.java
+71	jedis/JedisClusterConnectionHandler.java
+305	jedis/JedisClusterInfoCache.java
+89	util/JedisClusterCRC16.java
+32	util/JedisClusterHashTagUtil.java
+82	jedis/JedisSlotBasedConnectionHandler.java	
+
+第七部分，其它
+20	util/IOUtils.java
+146	util/JedisByteHashMap.java
+46	util/JedisURIHelper.java
+20	util/KeyMergeUtil.java
+43	util/SafeEncoder.java
+60	util/Slowlog.java

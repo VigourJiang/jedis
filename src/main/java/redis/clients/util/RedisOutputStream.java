@@ -9,6 +9,8 @@ import java.io.OutputStream;
  * operations like in-place string encoding. This stream fully ignore mark/reset and should not be
  * used outside Jedis
  */
+// jfq, 带有buffer的OutputStream，buffer的大小默认为8192（1024*8）
+// jfq, 这个buffer是Jedis的pipeline功能的关键
 public final class RedisOutputStream extends FilterOutputStream {
   protected final byte[] buf;
 

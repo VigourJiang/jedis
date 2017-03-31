@@ -6,6 +6,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+// jfq, MultiKeyPipelineBase类与ShardedJedisPipeline类是平行的，有共同的父类PipelineBase
+// jfq, 因此，原因就很明显了，支持Sharded的命令，放到PipelineBase中，
+// jfq, 不支持Sharded的命令，就挪到MultiKeyPipelineBase中。
 public abstract class MultiKeyPipelineBase extends PipelineBase implements
     MultiKeyBinaryRedisPipeline, MultiKeyCommandsPipeline, ClusterPipeline,
     BinaryScriptingCommandsPipeline, ScriptingCommandsPipeline, BasicRedisPipeline {

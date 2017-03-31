@@ -17,6 +17,7 @@ import redis.clients.util.RedisInputStream;
 import redis.clients.util.RedisOutputStream;
 import redis.clients.util.SafeEncoder;
 
+// jfq, 处理Redis的RESP序列化协议
 public final class Protocol {
 
   private static final String ASK_RESPONSE = "ASK";
@@ -85,6 +86,7 @@ public final class Protocol {
     sendCommand(os, command.getRaw(), args);
   }
 
+  // jfq，发送的命令总是RESP Array的格式
   private static void sendCommand(final RedisOutputStream os, final byte[] command,
       final byte[]... args) {
     try {
@@ -150,15 +152,15 @@ public final class Protocol {
   private static Object process(final RedisInputStream is) {
 
     final byte b = is.readByte();
-    if (b == PLUS_BYTE) {
+    if (b == PLUS_BYTE) { // jfq, For Simple Strings the first byte of the reply is "+"
       return processStatusCodeReply(is);
-    } else if (b == DOLLAR_BYTE) {
+    } else if (b == DOLLAR_BYTE) { // jfq, For Bulk Strings the first byte of the reply is "$"
       return processBulkReply(is);
-    } else if (b == ASTERISK_BYTE) {
+    } else if (b == ASTERISK_BYTE) { // jfq, For Arrays the first byte of the reply is "*"
       return processMultiBulkReply(is);
-    } else if (b == COLON_BYTE) {
+    } else if (b == COLON_BYTE) { // jfq, For Integers the first byte of the reply is ":"
       return processInteger(is);
-    } else if (b == MINUS_BYTE) {
+    } else if (b == MINUS_BYTE) { // jfq, For Errors the first byte of the reply is "-"
       processError(is);
       return null;
     } else {
@@ -198,11 +200,11 @@ public final class Protocol {
 
   private static List<Object> processMultiBulkReply(final RedisInputStream is) {
     final int num = is.readIntCrLf();
-    if (num == -1) {
+    if (num == -1) { // jfq, null array
       return null;
     }
     final List<Object> ret = new ArrayList<Object>(num);
-    for (int i = 0; i < num; i++) {
+    for (int i = 0; i < num; i++) { // jfq, process nested array element
       try {
         ret.add(process(is));
       } catch (JedisDataException e) {

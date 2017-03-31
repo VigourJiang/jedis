@@ -10,11 +10,18 @@ import java.util.TreeMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+// jfq, 这个是实现分片的关键类。
+// jfq,
 public class Sharded<R, S extends ShardInfo<R>> {
 
   public static final int DEFAULT_WEIGHT = 1;
+  // jfq, nodes is a sorted map，组成了一致性哈希的圆环。
+  // jfq, 每台服务器在这个圆环中占据了160 * weight个点。比如，如果服务器的weight为2，则在nodes中会占据320个节点。
+  // jfq, nodes中的key为hash后的整数，而nodes是一个TreeMap，TreeMap的特点就是按照key来排序。
+  // jfq, 这样就可以根据key，从nodes中找到一个临近的ShardInfo，然后根据ShardInfo，从resources找到一个Redis服务器。
   private TreeMap<Long, S> nodes;
   private final Hashing algo;
+  // jfq，每台Redis服务器，在resources占据一个key
   private final Map<ShardInfo<R>, R> resources = new LinkedHashMap<ShardInfo<R>, R>();
 
   /**
